@@ -1,0 +1,22 @@
+# python
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+
+# data and structures - too large for github
+data/structures/
+data/raw/
+data/processed/
+
+# outputs - generated at runtime
+outputs/
+
+# environments
+.env
+venv/
+.venv/
+
+# vscode
+.vscode/

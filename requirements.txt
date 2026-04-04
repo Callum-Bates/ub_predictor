@@ -1,0 +1,8 @@
+pandas
+numpy
+biopython
+requests
+tqdm
+scikit-learn
+xgboost
+structuremap
