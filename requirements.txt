@@ -6,3 +6,19 @@ tqdm
 scikit-learn
 xgboost
 structuremap
+
+
+
+# note 1: structuremap 0.0.10 has a pandas 2.x+ incompatibility in processing.py
+# the line df.apply(pd.to_numeric, errors='ignore') was patched to:
+# df.apply(lambda col: pd.to_numeric(col, errors='coerce') if col.dtype == object else col)
+
+# note 2: same pandas incompatbility, position numbers were being used as strings, not integers.
+# added 'df['position'] = pd.to_numeric(df['position'], errors='coerce')' 
+# before            for i in np.arange(0, len(start_idx)):
+                        # df['secondary_structure'] = np.where(
+                        #     df['position'].between(
+                        #         start_idx[i],
+                        #         end_idx[i]),
+                        #     note[i],
+                        #     df['secondary_structure'])
