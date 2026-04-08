@@ -23,6 +23,9 @@ import requests
 import time
 import logging
 from pathlib import Path
+import json
+import numpy as np
+import h5py
 
 log = logging.getLogger(__name__)
 
@@ -90,27 +93,65 @@ def get_urls(protein_id, timeout=15):
         return None
 
 
+
+
+
 # ------------------------------------------------------------
-# step 2 | download both files for one protein
+# step 2 | convert pae json to hdf5 format for structuremap
+# ------------------------------------------------------------
+
+def convert_pae_to_hdf(json_path, hdf_path):
+    """
+    Convert alphafold pae json file to hdf5 format.
+
+    structuremap expects pae data as a flat 1d array in an
+    hdf5 file named pae_{protein_id}.hdf. alphafold serves
+    it as a nested list (n x n matrix) in json format.
+    this function flattens and converts it.
+
+    params:
+        json_path : path to the downloaded _pae.json file
+        hdf_path  : path to write the output .hdf file to
+    """
+    with open(json_path) as f:
+        data = json.load(f)
+
+    # extract the pae matrix and flatten to 1d
+    # alphafold v3+ stores it under "predicted_aligned_error"
+    pae_matrix = data[0]["predicted_aligned_error"]
+    pae_flat   = [val for row in pae_matrix for val in row]
+
+    with h5py.File(hdf_path, "w") as hdf:
+        hdf.create_dataset(
+            name="dist",
+            data=pae_flat,
+            compression="lzf",
+            shuffle=True
+        )
+
+# ------------------------------------------------------------
+# step 3 | download and convert files for one protein
 # ------------------------------------------------------------
 
 def fetch_files(protein_id, out_dir, timeout=30):
     """
     Download cif and pae files for one protein.
+    pae json is converted to hdf5 after download - structuremap
+    requires hdf5 format with a specific naming convention.
 
     params:
-        protein_id : uniprot accession e.g. 'P04637'
+        protein_id : uniprot accession e.g. "P04637"
         out_dir    : Path to save files into
         timeout    : seconds before download gives up
 
-    returns one of: 'downloaded', 'exists', 'failed'
+    returns one of: "downloaded", "exists", "failed"
     """
     out_dir  = Path(out_dir)
     cif_path = out_dir / f"{protein_id}.cif"
-    pae_path = out_dir / f"{protein_id}_pae.json"
+    hdf_path = out_dir / f"pae_{protein_id}.hdf"
 
     # both already on disk - nothing to do
-    if cif_path.exists() and pae_path.exists():
+    if cif_path.exists() and hdf_path.exists():
         log.debug(f"  {protein_id} both files already on disk, skipping")
         return "exists"
 
@@ -120,41 +161,59 @@ def fetch_files(protein_id, out_dir, timeout=30):
     if urls is None:
         return "failed"
 
-    # download each file - track if either fails
     success = True
 
-    for file_path, url, label in [
-        (cif_path, urls["cif"], "cif"),
-        (pae_path, urls["pae"], "pae"),
-    ]:
-        # skip if this particular file already exists
-        if file_path.exists():
-            log.debug(f"  {protein_id} {label} already on disk, skipping")
-            continue
-
+    # download cif
+    if not cif_path.exists():
         try:
-            response = requests.get(url, timeout=timeout)
-
+            response = requests.get(urls["cif"], timeout=timeout)
             if response.status_code == 200:
-                file_path.write_bytes(response.content)
-                log.debug(f"  {protein_id} {label} downloaded")
-
+                cif_path.write_bytes(response.content)
+                log.debug(f"  {protein_id} cif downloaded")
             else:
                 log.warning(
-                    f"  {protein_id} {label} download returned "
+                    f"  {protein_id} cif download returned "
                     f"status {response.status_code}"
                 )
                 success = False
-
         except requests.exceptions.Timeout:
-            log.warning(f"  {protein_id} {label} download timed out")
+            log.warning(f"  {protein_id} cif download timed out")
+            success = False
+        except requests.exceptions.RequestException as e:
+            log.warning(f"  {protein_id} cif download failed: {e}")
             success = False
 
+    # download pae json and convert to hdf5
+    if not hdf_path.exists():
+        json_path = out_dir / f"{protein_id}_pae.json"
+        try:
+            response = requests.get(urls["pae"], timeout=timeout)
+            if response.status_code == 200:
+                json_path.write_bytes(response.content)
+                log.debug(f"  {protein_id} pae json downloaded")
+
+                # convert to hdf5 for structuremap
+                convert_pae_to_hdf(json_path, hdf_path)
+                log.debug(f"  {protein_id} pae converted to hdf5")
+
+                # remove the json - we only need the hdf5
+                json_path.unlink()
+                
+            else:
+                log.warning(
+                    f"  {protein_id} pae download returned "
+                    f"status {response.status_code}"
+                )
+                success = False
+        except requests.exceptions.Timeout:
+            log.warning(f"  {protein_id} pae download timed out")
+            success = False
         except requests.exceptions.RequestException as e:
-            log.warning(f"  {protein_id} {label} download failed: {e}")
+            log.warning(f"  {protein_id} pae download failed: {e}")
             success = False
 
     return "downloaded" if success else "failed"
+
 
 
 # ------------------------------------------------------------
