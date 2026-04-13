@@ -282,6 +282,10 @@ def run_train_mode(
     Path(models_dir).mkdir(parents=True, exist_ok=True)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
+    # drop ub if already present in feature matrix
+    # can happen if a previous run saved labels into the checkpoint
+    features_df = features_df.drop(columns=["ub"], errors="ignore")
+
     # merge ub labels back onto feature matrix
     label_df    = sites_df[["protein_id", "lysine_position", "ub"]]
     features_df = features_df.merge(
