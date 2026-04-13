@@ -9,7 +9,7 @@ __pycache__/
 data/structures/
 data/raw/
 data/processed/
-
+*.pkl
 # outputs - generated at runtime
 outputs/
 

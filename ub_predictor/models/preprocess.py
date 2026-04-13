@@ -43,12 +43,17 @@ METADATA_COLS = [
 # these need one-hot encoding
 # includes sequence window positions and spatial neighbour identities
 AA_CATEGORICAL_PREFIXES = [
-    "aa_k",    # sequence window positions e.g. aa_k-1, aa_k+1
-    "nb",      # spatial neighbour amino acids e.g. nb1_aa, nb2_aa
-    "ss_k",    # per-position secondary structure e.g. ss_k-1
+    "aa_k",       # sequence window positions e.g. aa_k-1, aa_k+1
+    "ss_k",       # per-position secondary structure e.g. ss_k-1
     "ss_lysine",  # secondary structure of the lysine itself
 ]
 
+# spatial neighbour amino acid columns specifically
+# nb1_aa, nb2_aa etc - NOT nb1_distance, nb1_phi etc - caught these incorrectly 
+AA_CATEGORICAL_EXACT_SUFFIXES = [
+    "_aa",
+    "_is_backbone",
+]
 
 # ------------------------------------------------------------
 # preprocessor class
@@ -75,7 +80,6 @@ class Preprocessor:
         self.is_fitted        = False
 
     def _identify_columns(self, df):
-    #
         """
         Split columns into categorical and numeric feature sets.
 
@@ -91,13 +95,20 @@ class Preprocessor:
         numeric_cols     = []
 
         for col in feature_cols:
-            # check if this column matches any categorical prefix
-            is_categorical = any(
+            # check prefix-based categorical columns
+            is_prefix_categorical = any(
                 col.startswith(prefix)
                 for prefix in AA_CATEGORICAL_PREFIXES
             )
 
-            if is_categorical:
+            # check suffix-based categorical columns
+            # catches nb1_aa, nb2_aa, nb1_is_backbone etc
+            is_suffix_categorical = any(
+                col.endswith(suffix)
+                for suffix in AA_CATEGORICAL_EXACT_SUFFIXES
+            )
+
+            if is_prefix_categorical or is_suffix_categorical:
                 categorical_cols.append(col)
             else:
                 numeric_cols.append(col)
