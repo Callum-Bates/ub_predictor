@@ -86,3 +86,10 @@ typing_extensions==4.15.0
 urllib3==2.6.3
 xgboost==3.2.0
 yarl==1.23.0
+
+
+
+# note: structuremap was removed - incompatible with pandas 3.x and python 3.12
+# replaced by:
+#   - metapredict  : idr classification
+#   - biopython    : reading cif files for coordinates and structure

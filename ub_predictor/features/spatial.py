@@ -130,48 +130,33 @@ def cartesian_to_spherical(vector, rotation_matrix):
 # ------------------------------------------------------------
 # step 1 | calculate spatial features for one lysine
 # ------------------------------------------------------------
-
-def calc_spatial_for_site(
+def _calc_spatial_from_structure(
     protein_id,
     position,
-    cif_dir,
+    structure,
     n_neighbours=N_NEIGHBOURS,
     sequence_separation=SEQUENCE_SEPARATION
 ):
     """
-    Calculate spatial neighbourhood features for one lysine site.
+    Calculate spatial features for one lysine using a pre-parsed structure.
+
+    sasa must already be computed on the structure before calling this.
+    called internally by add_spatial_features which handles parsing
+    and sasa calculation once per protein.
 
     params:
-        protein_id          : uniprot accession e.g. "P04637"
+        protein_id          : uniprot accession
         position            : 1-based lysine position
-        cif_dir             : directory containing cif files
+        structure           : biopython structure with sasa computed
         n_neighbours        : number of nearest neighbours to record
-        sequence_separation : minimum sequence distance for a residue
-                              to be considered a spatial neighbour
-    
-    returns dict of spatial features, or None if calculation fails
+        sequence_separation : minimum sequence distance for neighbour
     """
-    cif_path = Path(cif_dir) / f"{protein_id}.cif"
-
-    if not cif_path.exists():
-        log.warning(f"  {protein_id} no cif file found")
-        return None
-
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            parser    = MMCIFParser(QUIET=True)
-            structure = parser.get_structure(protein_id, str(cif_path))
-
-        # calculate sasa for rasa values
-        sr = ShrakeRupley()
-        sr.compute(structure, level="R")
-
         # locate the target lysine and its backbone atoms
         target_residue = None
-        lys_ca         = None
-        lys_n          = None
-        lys_c          = None
+        lys_ca = None
+        lys_n  = None
+        lys_c  = None
 
         for model in structure:
             for chain in model:
@@ -182,9 +167,9 @@ def calc_spatial_for_site(
                         if "CA" in residue:
                             lys_ca = residue["CA"].get_coord()
                         if "N" in residue:
-                            lys_n = residue["N"].get_coord()
+                            lys_n  = residue["N"].get_coord()
                         if "C" in residue:
-                            lys_c = residue["C"].get_coord()
+                            lys_c  = residue["C"].get_coord()
                         break
                 if target_residue:
                     break
@@ -198,54 +183,40 @@ def calc_spatial_for_site(
             )
             return None
 
-        # need all three backbone atoms to build local frame
         if any(coord is None for coord in [lys_ca, lys_n, lys_c]):
             log.warning(
                 f"  {protein_id} position {position} - "
-                f"lysine missing backbone atoms for local frame"
+                f"lysine missing backbone atoms"
             )
             return None
 
-        # build local coordinate frame from lysine backbone
         local_frame = build_local_frame(lys_n, lys_ca, lys_c)
 
-        # collect all sequence-distant residues with ca atoms
+        # collect sequence-distant neighbours
         candidates = []
 
         for model in structure:
             for chain in model:
                 for residue in chain:
+                    resname = residue.get_resname()
+                    res_pos = residue.get_id()[1]
 
-                    resname  = residue.get_resname()
-                    res_pos  = residue.get_id()[1]
-
-                    # skip non-standard residues
                     if resname not in MAX_ASA:
                         continue
-
-                    # skip the lysine itself
                     if residue == target_residue:
                         continue
-
-                    # skip sequence neighbours - already in sequence features
                     if abs(res_pos - position) <= sequence_separation:
                         continue
-
-                    # skip residues with no ca atom
                     if "CA" not in residue:
                         continue
 
                     ca_coord = residue["CA"].get_coord()
                     distance = np.linalg.norm(lys_ca - ca_coord)
+                    rasa     = min(residue.sasa / MAX_ASA[resname], 1.0)
 
-                    # calculate rasa for this residue
-                    rasa = min(residue.sasa / MAX_ASA[resname], 1.0)
-
-                    # determine if nearest contact is backbone or sidechain
-                    # backbone atoms are N, CA, C, O
-                    backbone_atoms  = {"N", "CA", "C", "O"}
-                    min_dist        = float("inf")
-                    is_backbone     = True
+                    backbone_atoms = {"N", "CA", "C", "O"}
+                    min_dist       = float("inf")
+                    is_backbone    = True
 
                     for atom in residue:
                         atom_dist = np.linalg.norm(
@@ -256,7 +227,6 @@ def calc_spatial_for_site(
                             is_backbone = atom.get_name() in backbone_atoms
 
                     candidates.append({
-                        "residue"    : residue,
                         "resname"    : resname,
                         "aa_1letter" : AA_3TO1.get(resname, "X"),
                         "distance"   : distance,
@@ -265,22 +235,19 @@ def calc_spatial_for_site(
                         "is_backbone": int(is_backbone),
                     })
 
-        # sort by distance - nearest first
         candidates.sort(key=lambda x: x["distance"])
-
-        # take the N nearest sequence-distant neighbours
         neighbours = candidates[:n_neighbours]
 
-        # build feature dict
         features = {
             "protein_id"      : protein_id,
             "lysine_position" : position,
         }
 
         for i, nb in enumerate(neighbours, 1):
-            vector = nb["ca_coord"] - lys_ca
-            dist, phi, theta = cartesian_to_spherical(vector, local_frame)
-
+            vector           = nb["ca_coord"] - lys_ca
+            dist, phi, theta = cartesian_to_spherical(
+                vector, local_frame
+            )
             features[f"nb{i}_aa"]          = nb["aa_1letter"]
             features[f"nb{i}_distance"]    = dist
             features[f"nb{i}_phi"]         = phi
@@ -288,8 +255,7 @@ def calc_spatial_for_site(
             features[f"nb{i}_rasa"]        = nb["rasa"]
             features[f"nb{i}_is_backbone"] = nb["is_backbone"]
 
-        # pad with nulls if fewer than n_neighbours found
-        # this can happen for very small proteins
+        # pad with nulls if fewer neighbours than expected
         for i in range(len(neighbours) + 1, n_neighbours + 1):
             features[f"nb{i}_aa"]          = None
             features[f"nb{i}_distance"]    = None
@@ -312,6 +278,30 @@ def calc_spatial_for_site(
 # step 2 | run for all sites in the dataframe
 # ------------------------------------------------------------
 
+
+
+def _empty_spatial_row(protein_id, position, n_neighbours):
+    """
+    Create a null spatial feature row for a site that failed.
+
+    params:
+        protein_id   : uniprot accession
+        position     : lysine position
+        n_neighbours : number of neighbours expected
+    """
+    row = {"protein_id": protein_id, "lysine_position": position}
+    for j in range(1, n_neighbours + 1):
+        row[f"nb{j}_aa"]          = None
+        row[f"nb{j}_distance"]    = None
+        row[f"nb{j}_phi"]         = None
+        row[f"nb{j}_theta"]       = None
+        row[f"nb{j}_rasa"]        = None
+        row[f"nb{j}_is_backbone"] = None
+    return row
+
+
+
+
 def add_spatial_features(
     sites_df,
     cif_dir,
@@ -321,54 +311,95 @@ def add_spatial_features(
     """
     Add spatial neighbourhood features to a dataframe of lysine sites.
 
-    follows the standard feature module interface -
-    takes a dataframe in, returns it with new columns added.
+    structures are parsed and sasa calculated once per protein,
+    then reused for all lysines from that protein - same caching
+    pattern as rasa.py for the same performance reasons.
 
     params:
         sites_df            : dataframe with protein_id, lysine_position
         cif_dir             : directory containing alphafold cif files
         n_neighbours        : number of nearest neighbours to record
         sequence_separation : minimum sequence distance for a spatial
-                              neighbour - avoids redundancy with
-                              sequence window features
-    
-    returns sites_df with spatial feature columns added
+                              neighbour
     """
-    cif_dir = Path(cif_dir)
-    total   = len(sites_df)
+    cif_dir  = Path(cif_dir)
+    total    = len(sites_df)
+    proteins = sites_df["protein_id"].unique()
 
     print(f"\n  calculating spatial features for {total} sites")
     print(f"  {n_neighbours} neighbours per site, "
           f"sequence separation >= {sequence_separation}")
+    print(f"  processing {len(proteins)} unique proteins")
 
     spatial_rows = []
     failed       = 0
 
-    for i, (_, row) in enumerate(sites_df.iterrows(), 1):
+    for protein_id in proteins:
 
-        if i % 10 == 0 or i == total:
-            print(f"  {i}/{total} sites processed")
+        cif_path      = cif_dir / f"{protein_id}.cif"
+        protein_sites = sites_df[
+            sites_df["protein_id"] == protein_id
+        ]
 
-        pid    = row["protein_id"]
-        pos    = int(row["lysine_position"])
-        result = calc_spatial_for_site(
-            pid, pos, cif_dir, n_neighbours, sequence_separation
-        )
+        if not cif_path.exists():
+            log.warning(f"  {protein_id} no cif file found - skipping")
+            for _, row in protein_sites.iterrows():
+                spatial_rows.append(
+                    _empty_spatial_row(
+                        protein_id,
+                        int(row["lysine_position"]),
+                        n_neighbours
+                    )
+                )
+                failed += 1
+            continue
 
-        if result is None:
-            failed += 1
-            # add null row so merge stays clean
-            null_row = {"protein_id": pid, "lysine_position": pos}
-            for j in range(1, n_neighbours + 1):
-                null_row[f"nb{j}_aa"]          = None
-                null_row[f"nb{j}_distance"]    = None
-                null_row[f"nb{j}_phi"]         = None
-                null_row[f"nb{j}_theta"]       = None
-                null_row[f"nb{j}_rasa"]        = None
-                null_row[f"nb{j}_is_backbone"] = None
-            spatial_rows.append(null_row)
-        else:
-            spatial_rows.append(result)
+        try:
+            # parse structure and calculate sasa once for this protein
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                parser    = MMCIFParser(QUIET=True)
+                structure = parser.get_structure(
+                    protein_id, str(cif_path)
+                )
+
+            sr = ShrakeRupley()
+            sr.compute(structure, level="R")
+
+            # process each lysine site for this protein
+            for _, row in protein_sites.iterrows():
+                position = int(row["lysine_position"])
+                result   = _calc_spatial_from_structure(
+                    protein_id,
+                    position,
+                    structure,
+                    n_neighbours,
+                    sequence_separation
+                )
+
+                if result is None:
+                    failed += 1
+                    spatial_rows.append(
+                        _empty_spatial_row(
+                            protein_id, position, n_neighbours
+                        )
+                    )
+                else:
+                    spatial_rows.append(result)
+
+        except Exception as e:
+            log.warning(
+                f"  {protein_id} structure processing failed: {e}"
+            )
+            for _, row in protein_sites.iterrows():
+                spatial_rows.append(
+                    _empty_spatial_row(
+                        protein_id,
+                        int(row["lysine_position"]),
+                        n_neighbours
+                    )
+                )
+                failed += 1
 
     if failed > 0:
         print(f"  {failed} sites failed spatial calculation - set to null")
@@ -377,8 +408,8 @@ def add_spatial_features(
 
     result = sites_df.merge(
         spatial_df,
-        on=["protein_id", "lysine_position"],
-        how="left"
+        on  = ["protein_id", "lysine_position"],
+        how = "left"
     )
 
     n_features = len(spatial_df.columns) - 2

@@ -63,48 +63,29 @@ MAX_ASA = {
 # default sphere radius for neighbourhood rasa calculation
 # 8.0 angstroms captures residues in direct contact with the lysine
 # consistent with standard residue contact definitions
-SPHERE_RADIUS = 5.0
+SPHERE_RADIUS = 8.0
 
 
 # ------------------------------------------------------------
 # step 1 | calculate rasa for one lysine site
 # ------------------------------------------------------------
 
-def calc_rasa_for_site(protein_id, position, cif_dir, sphere_radius=SPHERE_RADIUS):
+def _calc_rasa_from_structure(protein_id, position, structure, sphere_radius):
     """
-    Calculate rasa features for a single lysine site.
+    Calculate rasa features for one lysine using a pre-parsed structure.
 
-    opens the cif file, runs shrake-rupley sasa calculation,
-    then extracts rasa for the lysine and its sphere neighbours.
+    sasa must already be computed on the structure before calling this.
+    called internally by add_rasa_features which handles parsing
+    and sasa calculation once per protein.
 
     params:
-        protein_id    : uniprot accession e.g. "P04637"
+        protein_id    : uniprot accession
         position      : 1-based lysine position
-        cif_dir       : directory containing cif files
+        structure     : biopython structure object with sasa computed
         sphere_radius : angstrom radius for neighbourhood calculation
-    
-    returns dict of rasa features, or None if calculation fails
     """
-    cif_path = Path(cif_dir) / f"{protein_id}.cif"
-
-    if not cif_path.exists():
-        log.warning(f"  {protein_id} no cif file found at {cif_path}")
-        return None
-
     try:
-        # parse the structure - QUIET suppresses biopython warnings
-        # about non-standard residues which are common in alphafold files
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            parser    = MMCIFParser(QUIET=True)
-            structure = parser.get_structure(protein_id, str(cif_path))
-
-        # calculate sasa for all residues using shrake-rupley
-        # level="R" means per-residue (not per-atom)
-        sr = ShrakeRupley()
-        sr.compute(structure, level="R")
-
-        # locate the target lysine residue
+        # locate the target lysine
         target_residue = None
         target_ca      = None
 
@@ -136,41 +117,30 @@ def calc_rasa_for_site(protein_id, position, cif_dir, sphere_radius=SPHERE_RADIU
             )
             return None
 
-        # calculate rasa for the lysine itself
+        # rasa for the lysine itself
         lys_sasa = target_residue.sasa
         lys_rasa = min(lys_sasa / MAX_ASA["LYS"], 1.0)
 
-        # find all residues within sphere_radius of the lysine ca
-        # and calculate their rasa values
+        # rasa for residues within sphere_radius of lysine ca
         sphere_rasa_values = []
 
         for model in structure:
             for chain in model:
                 for residue in chain:
-
-                    # skip the lysine itself
                     if residue == target_residue:
                         continue
-
                     resname = residue.get_resname()
-
-                    # skip non-standard residues
                     if resname not in MAX_ASA:
                         continue
-
-                    # skip residues with no ca atom
                     if "CA" not in residue:
                         continue
-
-                    # calculate distance from lysine ca to this residue ca
-                    ca_coord = residue["CA"].get_coord()
-                    distance = np.linalg.norm(target_ca - ca_coord)
-
+                    distance = np.linalg.norm(
+                        target_ca - residue["CA"].get_coord()
+                    )
                     if distance <= sphere_radius:
                         rasa = min(residue.sasa / MAX_ASA[resname], 1.0)
                         sphere_rasa_values.append(rasa)
 
-        # summarise sphere neighbourhood
         if sphere_rasa_values:
             sphere_mean = round(float(np.mean(sphere_rasa_values)), 4)
             sphere_std  = round(float(np.std(sphere_rasa_values)), 4)
@@ -192,7 +162,7 @@ def calc_rasa_for_site(protein_id, position, cif_dir, sphere_radius=SPHERE_RADIU
 
     except Exception as e:
         log.warning(
-            f"  {protein_id} position {position} rasa calculation failed: {e}"
+            f"  {protein_id} position {position} rasa failed: {e}"
         )
         return None
 
@@ -205,16 +175,16 @@ def add_rasa_features(sites_df, cif_dir, sphere_radius=SPHERE_RADIUS):
     """
     Add rasa features to a dataframe of lysine sites.
 
-    follows the standard feature module interface -
-    takes a dataframe in, returns it with new columns added.
+    structures are parsed and sasa calculated once per protein,
+    then reused for all lysines from that protein. this avoids
+    re-parsing the same cif file dozens of times for proteins
+    with many lysine sites.
 
     params:
         sites_df      : dataframe with protein_id, lysine_position columns
         cif_dir       : directory containing alphafold cif files
         sphere_radius : angstrom radius for neighbourhood rasa -
                         defaults to 8.0a, adjust for benchmarking
-    
-    returns sites_df with rasa feature columns added
     """
     cif_dir = Path(cif_dir)
     total   = len(sites_df)
@@ -222,43 +192,89 @@ def add_rasa_features(sites_df, cif_dir, sphere_radius=SPHERE_RADIUS):
     print(f"\n  calculating rasa features for {total} sites")
     print(f"  sphere radius: {sphere_radius}a")
 
-    rasa_rows = []
-    failed    = 0
+    # group sites by protein so we parse each cif file only once
+    proteins     = sites_df["protein_id"].unique()
+    rasa_rows    = []
+    failed       = 0
 
-    for i, (_, row) in enumerate(sites_df.iterrows(), 1):
+    print(f"  processing {len(proteins)} unique proteins")
 
-        if i % 10 == 0 or i == total:
-            print(f"  {i}/{total} sites processed")
+    for protein_id in proteins:
 
-        pid    = row["protein_id"]
-        pos    = int(row["lysine_position"])
-        result = calc_rasa_for_site(pid, pos, cif_dir, sphere_radius)
+        cif_path = cif_dir / f"{protein_id}.cif"
+        protein_sites = sites_df[
+            sites_df["protein_id"] == protein_id
+        ]
 
-        if result is None:
-            failed += 1
-            # add a row of nulls so we can still merge cleanly
-            rasa_rows.append({
-                "protein_id"       : pid,
-                "lysine_position"  : pos,
-                "rasa_lysine"      : None,
-                "rasa_sphere_mean" : None,
-                "rasa_sphere_std"  : None,
-                "n_sphere_residues": None,
-                "sphere_radius_a"  : sphere_radius,
-            })
-        else:
-            rasa_rows.append(result)
+        if not cif_path.exists():
+            log.warning(f"  {protein_id} no cif file found - skipping")
+            for _, row in protein_sites.iterrows():
+                rasa_rows.append({
+                    "protein_id"       : protein_id,
+                    "lysine_position"  : int(row["lysine_position"]),
+                    "rasa_lysine"      : None,
+                    "rasa_sphere_mean" : None,
+                    "rasa_sphere_std"  : None,
+                    "n_sphere_residues": None,
+                    "sphere_radius_a"  : sphere_radius,
+                })
+                failed += 1
+            continue
+
+        try:
+            # parse structure and calculate sasa once for this protein
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                parser    = MMCIFParser(QUIET=True)
+                structure = parser.get_structure(protein_id, str(cif_path))
+
+            sr = ShrakeRupley()
+            sr.compute(structure, level="R")
+
+            # now process each lysine site for this protein
+            for _, row in protein_sites.iterrows():
+                position = int(row["lysine_position"])
+                result   = _calc_rasa_from_structure(
+                    protein_id, position, structure, sphere_radius
+                )
+
+                if result is None:
+                    failed += 1
+                    rasa_rows.append({
+                        "protein_id"       : protein_id,
+                        "lysine_position"  : position,
+                        "rasa_lysine"      : None,
+                        "rasa_sphere_mean" : None,
+                        "rasa_sphere_std"  : None,
+                        "n_sphere_residues": None,
+                        "sphere_radius_a"  : sphere_radius,
+                    })
+                else:
+                    rasa_rows.append(result)
+
+        except Exception as e:
+            log.warning(f"  {protein_id} structure processing failed: {e}")
+            for _, row in protein_sites.iterrows():
+                rasa_rows.append({
+                    "protein_id"       : protein_id,
+                    "lysine_position"  : int(row["lysine_position"]),
+                    "rasa_lysine"      : None,
+                    "rasa_sphere_mean" : None,
+                    "rasa_sphere_std"  : None,
+                    "n_sphere_residues": None,
+                    "sphere_radius_a"  : sphere_radius,
+                })
+                failed += 1
 
     if failed > 0:
         print(f"  {failed} sites failed rasa calculation - set to null")
 
     rasa_df = pd.DataFrame(rasa_rows)
 
-    # merge back onto original dataframe to preserve all columns
     result = sites_df.merge(
         rasa_df,
-        on=["protein_id", "lysine_position"],
-        how="left"
+        on  = ["protein_id", "lysine_position"],
+        how = "left"
     )
 
     print(f"  rasa features added")
