@@ -159,11 +159,18 @@ input file columns:
     )
 
     parser.add_argument(
-        "--verbose", "-v",
+            "--verbose", "-v",
+            action  = "store_true",
+            help    = "print detailed progress to terminal"
+        )
+    parser.add_argument(
+        "--download-only",
         action  = "store_true",
-        help    = "print detailed progress to terminal"
+        help    = "only download alphafold structure files and stop. "
+                "useful for separating download and compute steps "
+                "on hpc clusters where different resources are needed "
+                "for each stage."
     )
-
     return parser.parse_args()
 
 
@@ -193,6 +200,30 @@ def main():
 
     # import pipeline after arg validation
     # avoids slow imports if user just ran --help
+    
+    
+    
+    # handle download-only mode before importing heavy modules
+    if args.download_only:
+        import pandas as pd
+        from ub_predictor.fetch_structures import fetch_all
+
+        input_path  = Path(args.input)
+        sites_df    = pd.read_csv(input_path)
+        protein_ids = sites_df["protein_id"].unique().tolist()
+
+        print(f"\n  download-only mode")
+        print(f"  input    : {args.input}")
+        print(f"  proteins : {len(protein_ids)}")
+        print(f"  saving to: {args.structures}\n")
+
+        fetch_all(protein_ids, args.structures)
+
+        print(f"\n  downloads complete")
+        print(f"  re-run without --download-only to generate "
+              f"features and train/predict")
+        sys.exit(0)
+
     from ub_predictor.pipeline import run
 
     # run the pipeline
