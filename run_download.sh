@@ -23,6 +23,7 @@
 #SBATCH --time=0-06:00:00
 #SBATCH --output=outputs/logs/download_%j.log
 #SBATCH --error=outputs/logs/download_%j.err
+#SBATCH --account=None
 
 # print job information - useful for debugging later
 echo "job started  : $(date)"

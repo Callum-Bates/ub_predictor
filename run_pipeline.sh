@@ -23,6 +23,7 @@
 #SBATCH --time=0-12:00:00
 #SBATCH --output=outputs/logs/pipeline_%j.log
 #SBATCH --error=outputs/logs/pipeline_%j.err
+#SBATCH --account=None
 
 echo "job started  : $(date)"
 echo "job id       : $SLURM_JOB_ID"
