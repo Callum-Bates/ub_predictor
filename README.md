@@ -49,9 +49,9 @@ a csv file with these exact column names:
 protein_id,lysine_position,ub
 Q8IXI2,572,1
 Q8IXI2,194,0
-- `protein_id` — uniprot accession
-- `lysine_position` — position of the lysine in the sequence
-- `ub` — 1 = ubiquitinated, 0 = not ubiquitinated
+- `protein_id` - uniprot accession
+- `lysine_position` - position of the lysine in the sequence
+- `ub` - 1 = ubiquitinated, 0 = not ubiquitinated
 
 **search mode:**
 
