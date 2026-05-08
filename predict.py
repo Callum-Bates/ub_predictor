@@ -95,14 +95,14 @@ input file columns:
     )
 
     parser.add_argument(
-        "--input", "-i",
-        required = True,
-        help     = "path to input csv file"
+            "--input", "-i",
+            required = False,
+            default = None,
+            help     = "path to input csv file"
     )
-
     parser.add_argument(
         "--mode", "-m",
-        choices  = ["predict", "train"],
+        choices=["predict", "train", "search"],
         default  = "predict",
         help     = "predict: use pre-trained model  |  "
                    "train: train on your own data  "
@@ -171,6 +171,26 @@ input file columns:
                 "on hpc clusters where different resources are needed "
                 "for each stage."
     )
+        
+        # search mode arguments
+    parser.add_argument(
+        "--reference",
+        type=str,
+        default=None,
+        help="reference site for search mode, format: PROTEIN_ID,POSITION (e.g. Q8IXI2,572)"
+    )
+    parser.add_argument(
+        "--targets",
+        type=str,
+        default=None,
+        help="path to csv of target protein ids to scan (search mode)"
+    )
+    parser.add_argument(
+        "--n-results",
+        type=int,
+        default=None,
+        help="max number of search results to return (default: all)"
+    )
     return parser.parse_args()
 
 
@@ -181,10 +201,14 @@ def main():
     setup_logging(args.verbose)
 
     # validate a few things before importing the heavy modules
-    input_path = Path(args.input)
-    if not input_path.exists():
-        print(f"\n  error: input file not found - {args.input}")
-        sys.exit(1)
+    if args.mode != "search":
+            if args.input is None:
+                print("\n  error: --input is required for predict and train modes")
+                sys.exit(1)
+            input_path = Path(args.input)
+            if not input_path.exists():
+                print(f"\n  error: input file not found - {args.input}")
+                sys.exit(1)
 
     if args.mode == "predict" and args.test is not None:
         print(
@@ -197,6 +221,27 @@ def main():
             f"\n  note: --model is only used in predict mode. "
             f"in train mode a new model is always created."
         )
+        
+    if args.mode == "search":
+        if args.reference is None:
+            print("\n  error: --reference is required for search mode")
+            sys.exit(1)
+        if args.targets is None:
+            print("\n  error: --targets is required for search mode")
+            sys.exit(1)
+
+        try:
+            ref_parts = args.reference.split(",")
+            ref_protein = ref_parts[0].strip()
+            ref_position = int(ref_parts[1].strip())
+        except (IndexError, ValueError):
+            print(
+                "\n  error: --reference must be in format "
+                "PROTEIN_ID,POSITION (e.g. Q8IXI2,572)"
+            )
+            sys.exit(1)
+        
+        
 
     # import pipeline after arg validation
     # avoids slow imports if user just ran --help
@@ -227,18 +272,32 @@ def main():
     from ub_predictor.pipeline import run
 
     # run the pipeline
-    run(
-        sites_path      = args.input,
-        mode            = args.mode,
-        structures_dir  = args.structures,
-        processed_dir   = args.processed,
-        models_dir      = args.models_dir,
-        output_dir      = args.output,
-        model_path      = args.model,
-        test_sites_path = args.test,
-        threshold       = args.threshold,
-    )
-
+    if args.mode == "search":
+        run(
+            sites_path      = args.targets,
+            mode            = "search",
+            structures_dir  = args.structures,
+            processed_dir   = args.processed,
+            models_dir      = args.models_dir,
+            output_dir      = args.output,
+            threshold       = args.threshold,
+            ref_protein_id  = ref_protein,
+            ref_position    = ref_position,
+            targets_path    = args.targets,
+            n_results       = args.n_results,
+        )
+    else:
+        run(
+            sites_path      = args.input,
+            mode            = args.mode,
+            structures_dir  = args.structures,
+            processed_dir   = args.processed,
+            models_dir      = args.models_dir,
+            output_dir      = args.output,
+            model_path      = args.model,
+            test_sites_path = args.test,
+            threshold       = args.threshold,
+        )
 
 if __name__ == "__main__":
     main()

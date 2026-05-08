@@ -38,7 +38,7 @@ from ub_predictor.models.preprocess  import Preprocessor
 from ub_predictor.models.train       import run_training
 from ub_predictor.models.predict     import run_prediction, load_model
 from ub_predictor.models.evaluate    import run_evaluation
-
+from ub_predictor.search import run_search
 log = logging.getLogger(__name__)
 
 
@@ -389,6 +389,43 @@ def run_predict_mode(
 
 
 # ------------------------------------------------------------
+# step 5c | search mode
+# ------------------------------------------------------------
+
+def run_search_mode(
+    ref_protein_id,
+    ref_position,
+    targets_path,
+    structures_dir,
+    output_dir,
+    n_results=None,
+):
+    """
+    run structural similarity search against target proteins.
+
+    generates features for a reference site and all lysines
+    in target proteins, then ranks by gower distance.
+
+    params:
+        ref_protein_id : uniprot id of the reference protein
+        ref_position   : lysine position in the reference protein
+        targets_path   : path to csv with protein_id column
+        structures_dir : directory containing cif files
+        output_dir     : directory to write results
+        n_results      : max results to return (None = all)
+    """
+    results = run_search(
+        ref_protein_id=ref_protein_id,
+        ref_position=ref_position,
+        targets_path=targets_path,
+        structures_dir=structures_dir,
+        output_dir=output_dir,
+        n_results=n_results,
+    )
+
+    return results
+
+# ------------------------------------------------------------
 # main entry point
 # ------------------------------------------------------------
 
@@ -402,6 +439,10 @@ def run(
     model_path     = None,
     test_sites_path= None,
     threshold      = 0.5,
+    ref_protein_id = None,
+    ref_position   = None,
+    targets_path   = None,
+    n_results      = None,
 ):
     """
     Run the full ub_predictor pipeline.
@@ -423,6 +464,29 @@ def run(
     print(f"  outputs  : {output_dir}")
     print(f"  {'='*48}\n")
 
+# search mode - separate flow, exits early
+    if mode == "search":
+        targets_df = pd.read_csv(targets_path)
+        target_ids = targets_df["protein_id"].unique().tolist()
+        if ref_protein_id not in target_ids:
+            target_ids.append(ref_protein_id)
+
+        fetch_all(target_ids, out_dir=structures_dir)
+
+        run_search_mode(
+            ref_protein_id=ref_protein_id,
+            ref_position=ref_position,
+            targets_path=targets_path,
+            structures_dir=structures_dir,
+            output_dir=output_dir,
+            n_results=n_results,
+        )
+
+        print(f"\n  {'='*48}")
+        print(f"  pipeline complete")
+        print(f"  outputs saved to {output_dir}/")
+        return
+    
     # validate input
     sites_df = validate_input(sites_path, mode)
 

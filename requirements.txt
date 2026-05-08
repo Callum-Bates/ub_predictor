@@ -15,6 +15,7 @@ cuda-pathfinder==1.5.2
 cuda-toolkit==13.0.2
 cycler==0.12.1
 Cython==3.2.4
+et_xmlfile==2.0.0
 filelock==3.25.2
 fonttools==4.62.1
 frozenlist==1.8.0
@@ -26,6 +27,7 @@ h5py==3.16.0
 httpcore==1.0.9
 httpx==0.28.1
 idna==3.11
+iniconfig==2.3.0
 Jinja2==3.1.6
 joblib==1.5.3
 kiwisolver==1.5.0
@@ -57,16 +59,20 @@ nvidia-nccl-cu13==2.28.9
 nvidia-nvjitlink==13.0.88
 nvidia-nvshmem-cu13==3.4.5
 nvidia-nvtx==13.0.85
+openpyxl==3.1.5
 packaging==26.0
 pandas==3.0.2
 patsy==1.0.2
 pillow==12.2.0
 platformdirs==4.9.4
 plotly==6.6.0
+pluggy==1.6.0
 pooch==1.9.0
 propcache==0.4.1
 protfasta==0.1.15.2
+Pygments==2.20.0
 pyparsing==3.3.2
+pytest==9.0.3
 python-dateutil==2.9.0.post0
 pytorch-lightning==2.6.1
 PyYAML==6.0.3
@@ -86,10 +92,3 @@ typing_extensions==4.15.0
 urllib3==2.6.3
 xgboost==3.2.0
 yarl==1.23.0
-
-
-
-# note: structuremap was removed - incompatible with pandas 3.x and python 3.12
-# replaced by:
-#   - metapredict  : idr classification
-#   - biopython    : reading cif files for coordinates and structure
