@@ -1,6 +1,6 @@
 ## about
 This Ub predictor tool aims to allow wet lab researchers to explore physiochemical environments surrounding ubiquitination sites. 
-Currently, this tool offers:
+Currently, this tool offers:  
 **train mode** - where users can provide a set of lysine sites with known ubiquitination outcomes.  A gradient boosted machine learning model (XGBoost) is trained on this data.  Models are evaluated using 5-fold cross validation (with future plans to add validation on independent datasets), and highlight significant biological features.
 
 <img width="1229" height="536" alt="image" src="https://github.com/user-attachments/assets/634ce930-eb5a-4bd9-8cb8-2f319c060c69" />
