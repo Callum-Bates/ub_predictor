@@ -85,6 +85,7 @@ tail -f outputs/logs/pipeline_<jobid>.log
 ```bash
 # search mode
 bash submit_search.sh Q8IXI2,572 data/raw/my_targets.csv
+
 # monitor
 squeue -u $USER
 tail -f outputs/logs/search_.log
