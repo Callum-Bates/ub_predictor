@@ -58,13 +58,13 @@ Q8IXI2,194,0
 two files needed.
 
 reference site:
-protein_id,lysine_position
+protein_id,lysine_position  
 Q8IXI2,572
 
-target proteins to scan:
-protein_id
-P21796
-O95140
+target proteins to scan:  
+protein_id  
+P21796  
+O95140  
 Q16539
 
 ---
