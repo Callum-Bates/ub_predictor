@@ -82,17 +82,12 @@ squeue -u $USER
 tail -f outputs/logs/pipeline_<jobid>.log
 ```
 
-search mode runs directly (no slurm needed for small target lists):
 ```bash
-source .venv/bin/activate
-
-python predict.py \
-    --mode search \
-    --ref-protein Q8IXI2 \
-    --ref-position 572 \
-    --targets data/raw/target_proteins.csv \
-    --structures data/structures \
-    --verbose
+# search mode
+bash submit_search.sh Q8IXI2,572 data/raw/my_targets.csv
+# monitor
+squeue -u $USER
+tail -f outputs/logs/search_.log
 ```
 
 ---
