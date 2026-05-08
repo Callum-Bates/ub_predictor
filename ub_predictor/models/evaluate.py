@@ -336,8 +336,13 @@ def plot_feature_importance(model, feature_names, output_dir=".",
     importance = model.feature_importances_
 
     # build dataframe and sort
+    # rename feature names to readable labels before plotting
+    from ub_predictor.rename_features import _rename_col
+    readable_names = [_rename_col(f) for f in feature_names]
+
+    # build dataframe and sort
     importance_df = pd.DataFrame({
-        "feature"   : feature_names,
+        "feature"   : readable_names,
         "importance": importance
     }).sort_values("importance", ascending=False).head(top_n)
 

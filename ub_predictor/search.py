@@ -23,6 +23,7 @@
 import pandas as pd
 import numpy as np
 import logging
+import time
 from pathlib import Path
 
 from ub_predictor.features.sequence import fetch_sequences
@@ -284,6 +285,9 @@ def run_search(
 
     print(f"\n  -- structural similarity search --")
     print(f"  reference: {ref_protein_id} K{ref_position}")
+    
+    t_start = time.time()
+
 
     # --------------------------------------------------------
     # load target protein list
@@ -392,6 +396,14 @@ def run_search(
     )
     results.to_csv(out_path, index=False)
 
+    # save full feature matrix with readable column names
+    # so joanna can inspect the structural values for each candidate
+    from ub_predictor.rename_features import rename_columns
+    features_path = output_dir / (
+        f"search_{ref_protein_id}_K{ref_position}_features.csv"
+    )
+    rename_columns(featured).to_csv(features_path, index=False)
+
     print(f"\n  -- search complete --")
     print(f"  {len(results)} candidates ranked")
     print(f"  results saved to {out_path}")
@@ -407,5 +419,8 @@ def run_search(
                 f"{row['gower_distance']:<10.4f} "
                 f"{row['top_neighbours']}"
             )
+
+    elapsed = time.time() - t_start
+    print(f"\n  total time: {elapsed:.1f}s")
 
     return results

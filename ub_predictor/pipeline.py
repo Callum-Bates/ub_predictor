@@ -245,6 +245,11 @@ def run_features(structured_df, structures_dir, processed_dir):
         )
         save_checkpoint(df_complete, complete_ckpt)
 
+        # save a separate human-readable version for interpretation
+        from ub_predictor.rename_features import rename_columns
+        readable_path = processed_dir / "features_complete_readable.csv"
+        rename_columns(df_complete).to_csv(readable_path, index=False)
+        log.debug(f"  readable feature matrix saved - features_complete_readable.csv")
     print(f"\n  feature matrix complete")
     print(f"  {df_complete.shape[0]} sites, "
           f"{df_complete.shape[1]} columns")
