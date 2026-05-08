@@ -57,7 +57,7 @@ Q8IXI2,194,0
 
 two files needed.
 
-reference site:
+reference site:  
 protein_id,lysine_position  
 Q8IXI2,572
 
@@ -118,10 +118,10 @@ search_Q8IXI2_K572.csv             ranked candidate sites
 search_Q8IXI2_K572_features.csv    full feature table for candidates
 
 ### search results columns
-- `protein_id` — candidate protein
-- `lysine_position` — candidate lysine position
-- `gower_distance` — similarity to reference site (0 = identical, 1 = completely different)
-- `top_neighbours` — nearest 3d neighbours e.g. "P at 9.5a, Q at 9.3a"
+- `protein_id` - candidate protein
+- `lysine_position` - candidate lysine position
+- `gower_distance` - similarity to reference site (0 = identical, 1 = completely different)
+- `top_neighbours` - nearest 3d neighbours e.g. "P at 9.5a, Q at 9.3a"
 
 ---
 
