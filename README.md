@@ -4,8 +4,8 @@ Currently, this tool offers:
 **train mode** - where users can provide a set of lysine sites with known ubiquitination outcomes.  A gradient boosted machine learning model (XGBoost) is trained on this data.  Models are evaluated using 5-fold cross validation (with future plans to add validation on independent datasets), and highlight significant biological features.
 
 <img width="1229" height="536" alt="image" src="https://github.com/user-attachments/assets/634ce930-eb5a-4bd9-8cb8-2f319c060c69" />
-
-
+  
+  
     
 **search mode** - where users can query a specific lysine site in a specific protein.  This site is characterised using the same feature generation process used in *train mode*, and sites are queried against a user provided list of proteins.  Similarity between sites is measured by [Gower's distance](https://rajithkalinda.medium.com/understanding-gower-distance-for-mixed-data-types-in-machine-learning-e90ad42d5684), a similarity measure of 2 data points, capable of handling both numerical and categorical data.  Similarity scores per residue are ranked and reported in an output file with contributing features.
 
