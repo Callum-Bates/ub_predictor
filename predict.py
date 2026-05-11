@@ -273,19 +273,17 @@ def main():
 
     # run the pipeline
     if args.mode == "search":
-        run(
-            sites_path      = args.targets,
-            mode            = "search",
-            structures_dir  = args.structures,
-            processed_dir   = args.processed,
-            models_dir      = args.models_dir,
-            output_dir      = args.output,
-            threshold       = args.threshold,
-            ref_protein_id  = ref_protein,
-            ref_position    = ref_position,
-            targets_path    = args.targets,
-            n_results       = args.n_results,
-        )
+            from ub_predictor.search import run_search
+            run_search(
+                ref_protein_id = ref_protein,
+                ref_position   = ref_position,
+                targets_path   = args.targets,
+                structures_dir = args.structures,
+                output_dir     = args.output,
+                n_results      = args.n_results,
+            )
+            sys.exit(0)
+
     else:
         run(
             sites_path      = args.input,

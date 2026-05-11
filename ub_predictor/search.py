@@ -397,7 +397,7 @@ def run_search(
     results.to_csv(out_path, index=False)
 
     # save full feature matrix with readable column names
-    # so joanna can inspect the structural values for each candidate
+    # allows inspect the structural values for each candidate
     from ub_predictor.rename_features import rename_columns
     features_path = output_dir / (
         f"search_{ref_protein_id}_K{ref_position}_features.csv"

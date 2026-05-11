@@ -5,7 +5,7 @@
 # biological labels before saving output files.
 #
 # called automatically when saving predictions.csv and
-# features_complete.csv - joanna sees readable names
+# features_complete.csv - readable names here
 # without any extra steps.
 # ------------------------------------------------------------
 
@@ -98,6 +98,25 @@ STATIC_RENAMES = {
     "shap_value_3"             : "top_feature_3_contribution",
     "shap_value_4"             : "top_feature_4_contribution",
     "shap_value_5"             : "top_feature_5_contribution",
+    
+    
+    # new rasa features
+    "rasa_sphere_median"       : "median_surface_exposure_8A_neighbourhood",
+    "rasa_sphere_max"          : "max_surface_exposure_8A_neighbourhood",
+    "mean_n_terminal_rasa"     : "mean_surface_exposure_n_terminal_half",
+    "mean_c_terminal_rasa"     : "mean_surface_exposure_c_terminal_half",
+    "plddt_lysine"             : "alphafold_confidence_score_lysine",
+
+    # new sequence features
+    "nearest_basic_distance"   : "distance_to_nearest_basic_residue_KRH",
+    "nearest_acidic_distance"  : "distance_to_nearest_acidic_residue_DE",
+    "nearest_proline_distance" : "distance_to_nearest_proline",
+    "nearest_glycine_distance" : "distance_to_nearest_glycine",
+    "net_charge_local"         : "net_charge_in_window",
+    "charge_asymmetry"         : "charge_asymmetry_left_vs_right_of_lysine",
+    "hydrophobic_hydrophilic_ratio": "hydrophobic_to_hydrophilic_ratio",
+    "aromatic_aliphatic_ratio" : "aromatic_to_aliphatic_ratio",
+    "acidic_basic_ratio"       : "acidic_to_basic_ratio",
 }
 
 

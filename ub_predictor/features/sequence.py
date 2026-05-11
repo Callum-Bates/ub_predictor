@@ -219,6 +219,87 @@ def calc_sequence_features(protein_id, position, sequence, window_size=WINDOW_SI
             round(count / n_valid, 4) if n_valid > 0 else 0.0
         )
 
+    # -- nearest residue distances --
+    # how many positions to the nearest residue of each type
+    # measured as absolute sequence distance from the lysine
+    # captures whether key residue types are close or far in sequence
+    special_types = {
+        "nearest_basic_distance"  : set("KRH"),
+        "nearest_acidic_distance" : set("DE"),
+        "nearest_proline_distance": set("P"),
+        "nearest_glycine_distance": set("G"),
+    }
+
+    for feature_name, residue_set in special_types.items():
+        nearest = None
+        for offset in range(-window_size, window_size + 1):
+            if offset == 0:
+                continue
+            idx = centre + offset
+            if 0 <= idx < len(window):
+                aa = window[idx]
+                if aa in residue_set:
+                    dist = abs(offset)
+                    if nearest is None or dist < nearest:
+                        nearest = dist
+        # if not found in window, set to window_size + 1
+        # indicates the nearest is beyond the window boundary
+        features[feature_name] = nearest if nearest is not None else window_size + 1
+
+    # -- charge-based features --
+    # net_charge_local: sum of charges in window
+    # positive residues (K, R, H) count as +1
+    # negative residues (D, E) count as -1
+    positive_charge = sum(
+        1 for aa in window_no_pad if aa in set("KRH")
+    )
+    negative_charge = sum(
+        1 for aa in window_no_pad if aa in set("DE")
+    )
+
+    features["net_charge_local"] = positive_charge - negative_charge
+
+    # charge_asymmetry: difference in charge between
+    # n-terminal half and c-terminal half of the window
+    # captures whether charge is asymmetrically distributed
+    # around the lysine
+    left_half  = window[:centre].replace("X", "")
+    right_half = window[centre + 1:].replace("X", "")
+
+    left_charge = sum(
+        1 if aa in set("KRH") else -1 if aa in set("DE") else 0
+        for aa in left_half
+    )
+    right_charge = sum(
+        1 if aa in set("KRH") else -1 if aa in set("DE") else 0
+        for aa in right_half
+    )
+
+    features["charge_asymmetry"] = left_charge - right_charge
+
+    # -- chemical ratio features --
+    # hydrophobic_hydrophilic_ratio: hydrophobic / polar residues
+    # aromatic_aliphatic_ratio: aromatic / aliphatic residues
+    # acidic_basic_ratio: acidic / basic residues
+    # small number added to denominator to avoid division by zero
+    hydrophobic = sum(1 for aa in window_no_pad if aa in set("AILMVFWY"))
+    hydrophilic  = sum(1 for aa in window_no_pad if aa in set("STNQDE"))
+    aromatic     = sum(1 for aa in window_no_pad if aa in set("FWYH"))
+    aliphatic    = sum(1 for aa in window_no_pad if aa in set("AILV"))
+    acidic       = sum(1 for aa in window_no_pad if aa in set("DE"))
+    basic        = sum(1 for aa in window_no_pad if aa in set("KRH"))
+
+    features["hydrophobic_hydrophilic_ratio"] = round(
+        hydrophobic / (hydrophilic + 0.001), 4
+    )
+    features["aromatic_aliphatic_ratio"] = round(
+        aromatic / (aliphatic + 0.001), 4
+    )
+    features["acidic_basic_ratio"] = round(
+        acidic / (basic + 0.001), 4
+    )
+
+
     return features
 
 

@@ -23,9 +23,12 @@
 
 import pandas as pd
 import logging
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("matplotlib").setLevel(logging.WARNING)
 from pathlib import Path
 
 import metapredict as meta
+
 
 log = logging.getLogger(__name__)
 
